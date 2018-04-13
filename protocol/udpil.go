@@ -142,9 +142,9 @@ func (con *Connection) Touch() {
 		con.Ilrl = uint16(rand.Int31()&0xffff)
 		con.Ilrr = 0
 		con.Rsid = 0
-		con.Rsmx = 32
+		con.Rsmx = 128
 		con.Tsid = 0
-		con.Tsmx = 32
+		con.Tsmx = 128
 		con.Tsln = 0
 		con.Tsct = 1
 		
@@ -165,7 +165,7 @@ func (con *Connection) Rcv(d *Mblk) {
 	retry:
 	switch con.State {
 	case S_closed,S_taken:
-		if !isrange(0,32,hdr.Ilid) {
+		if !isrange(0,128,hdr.Ilid) {
 			con.Reset = true
 			con.Tick()
 			return
@@ -177,9 +177,9 @@ func (con *Connection) Rcv(d *Mblk) {
 			con.Ilrr = 0
 		}
 		con.Rsid = 0
-		con.Rsmx = 32
+		con.Rsmx = 128
 		con.Tsid = 0
-		con.Tsmx = 32
+		con.Tsmx = 128
 		con.Tsln = 0
 		con.Tsct = 1
 		
@@ -250,7 +250,7 @@ func (con *Connection) Rcv(d *Mblk) {
 			con.Rsid += uint32(n)
 			con.Ractr += n
 			con.Respin = con.Recvq.Findinuse(uint( con.Rsmx - con.Rsid ))
-			con.Rsmx = con.Rsid + uint32(window(64,con.Recvq.LenI(),32))
+			con.Rsmx = con.Rsid + uint32(window(256,con.Recvq.LenI(),128))
 			con.Ack = true
 		} else {
 			con.Respin = con.Recvq.Findinuse(uint( con.Rsmx - con.Rsid ))
@@ -340,7 +340,7 @@ func (con *Connection) LenOut() uint {
 func (con *Connection) QueueIn(queue chan <- interface{}) {
 	con.Recvq.ShiftIn(queue)
 	ill := con.Recvq.LenI()
-	con.Rsmx = con.Rsid + uint32(window(64,ill,32))
+	con.Rsmx = con.Rsid + uint32(window(256,ill,128))
 	if ill==0 {
 		con.Rmit = true
 		con.Respin = true
