@@ -24,7 +24,6 @@
 
 package protocol
 
-import "bytes"
 import "encoding/binary"
 import "io"
 import "math/rand"
@@ -54,6 +53,8 @@ func (h *Header) String() string {
 		" Rd :",h.Ilrd,
 		" }")
 }
+
+const HeaderLength = 20
 
 const (
 	F_data uint16 = 1<<iota
@@ -108,15 +109,17 @@ func (con *Connection) Init() {
 	con.Txq.Init()
 }
 
-
 func (con *Connection) iSnd(hdr *Header,d []byte) {
-	pkt := new(bytes.Buffer)
+	pkt := GetMblk()
 	
 	hdr.Illen = uint16(len(d))
+	
 	binary.Write(pkt,binary.BigEndian,hdr)
 	pkt.Write(d)
 	
-	con.Out.Write(pkt.Bytes())
+	pkt.Flip()
+	
+	con.Out.Write(pkt.Body())
 }
 
 
@@ -151,10 +154,12 @@ func (con *Connection) Touch() {
 		con.Txq.Clear()
 	}
 }
-func (con *Connection) Rcv(d []byte) {
-	hdr := new(Header)
+func (con *Connection) Rcv(d *Mblk) {
+	hdr := getHeader()
+	defer d.Dispose()
+	defer headers.Put(hdr)
 	
-	if binary.Read(bytes.NewReader(d),binary.BigEndian,hdr)!=nil { return }
+	if binary.Read(d.SetPos(0),binary.BigEndian,hdr)!=nil { return }
 	
 	retry:
 	switch con.State {
@@ -232,10 +237,11 @@ func (con *Connection) Rcv(d []byte) {
 			return
 		}
 		
-		pl := d[20:]
-		if len(pl)<int(hdr.Illen) { return } /* Payload too short! */
-		pl = pl[:hdr.Illen] /* Cut payload. */
+		pl := d
+		if pl.Len()<int(hdr.Illen) { return } /* Payload too short! */
+		pl.GbLim(int(hdr.Illen)) /* Cut payload. */
 		
+		pl.Retain() /* Revert the deferred dispose. */
 		*pos = pl
 		
 		n := con.Recvq.ShiftO2I()
@@ -259,7 +265,8 @@ func (con *Connection) Rcv(d []byte) {
 
 func (con *Connection) Tick() {
 	var data []byte
-	hdr := new(Header)
+	hdr := getHeader()
+	defer headers.Put(hdr)
 	con.prep(hdr)
 	hdr.Ilid = con.Tsct
 	
@@ -282,6 +289,10 @@ func (con *Connection) Tick() {
 			hdr.Ilflg |= F_data
 			con.Tsct++
 			data = b
+		} else if b,ok := v.(*Mblk); ok {
+			hdr.Ilflg |= F_data
+			con.Tsct++
+			data = b.Body()
 		}
 	}
 	

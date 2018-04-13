@@ -67,9 +67,10 @@ func (s *ServerSocket) Input(udp *net.UDPConn) {
 			continue
 		default:
 		}
-		data := make([]byte,1500)
-		n,addr,e := udp.ReadFromUDP(data)
-		if e!=nil { continue }
+		pkt := protocol.GetMblk()
+		n,addr,e := udp.ReadFromUDP(pkt.GbBody())
+		if e!=nil { pkt.Dispose(); continue }
+		pkt.GbLim(n)
 		
 		/* ===== Begin Packet Processing here ===== */
 		
@@ -80,7 +81,7 @@ func (s *ServerSocket) Input(udp *net.UDPConn) {
 			case <- sck.Brk:
 				delete(s.Socks,dk)
 			default:
-				sck.Pkts <- data[:n]
+				sck.Pkts <- pkt
 				continue
 			}
 		}
@@ -97,7 +98,7 @@ func (s *ServerSocket) Input(udp *net.UDPConn) {
 		con.Out = pw
 		con.State = protocol.S_closed
 		
-		con.Rcv(data[:n])
+		con.Rcv(pkt)
 		
 		if con.State != protocol.S_closed {
 			sck := new(Socket).Init()

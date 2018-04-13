@@ -35,7 +35,7 @@ const (
 
 type Socket struct{
 	In, Out chan interface{}
-	Pkts chan []byte
+	Pkts chan *protocol.Mblk
 	Brk chan int
 	Sig chan int
 	Restart chan int
@@ -45,7 +45,7 @@ type Socket struct{
 func (s *Socket) Init() *Socket {
 	s.In = make(chan interface{},16)
 	s.Out = make(chan interface{},16)
-	s.Pkts = make(chan []byte,16)
+	s.Pkts = make(chan *protocol.Mblk,16)
 	s.Brk = make(chan int)
 	s.Sig = make(chan int,1)
 	s.Restart = make(chan int,1)
@@ -58,15 +58,18 @@ func (s *Socket) Input(udp *net.UDPConn) {
 		case <- s.Brk: return
 		default:
 		}
-		data := make([]byte,1500)
-		n,e := udp.Read(data)
-		if e==nil {			
-			s.Pkts <- data[:n]
+		pkt := protocol.GetMblk()
+		n,e := udp.Read(pkt.GbBody())
+		if e==nil {
+			pkt.GbLim(n)
+			s.Pkts <- pkt
+		} else {
+			pkt.Dispose()
 		}
 	}
 }
 func (s *Socket) Close() {
-	defer recover()
+	defer func(){ recover() }()
 	close(s.Brk)
 }
 func (s *Socket) teardown() {
