@@ -111,6 +111,7 @@ func (con *Connection) Init() {
 
 func (con *Connection) iSnd(hdr *Header,d []byte) {
 	pkt := GetMblk()
+	defer pkt.Dispose()
 	
 	hdr.Illen = uint16(len(d))
 	
