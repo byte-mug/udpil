@@ -69,6 +69,11 @@ const (
 	S_taken /* Trying to open a connection. */
 )
 
+type ConCap struct {
+	Reconnect bool
+	Autoflush bool
+}
+
 type Connection struct {
 	Out io.Writer
 	State uint
@@ -92,11 +97,7 @@ type Connection struct {
 		Reconnect bool
 	}
 	
-	Cap struct {
-		Reconnect bool
-		Autoflush bool
-	}
-	
+	Cap ConCap
 }
 
 func (con *Connection) TxInfo() string {

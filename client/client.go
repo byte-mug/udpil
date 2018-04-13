@@ -38,6 +38,9 @@ type Socket struct{
 	Pkts chan []byte
 	Brk chan int
 	Sig chan int
+	Restart chan int
+	Closer chan DispKey
+	Closee DispKey
 }
 func (s *Socket) Init() *Socket {
 	s.In = make(chan interface{},16)
@@ -45,6 +48,7 @@ func (s *Socket) Init() *Socket {
 	s.Pkts = make(chan []byte,16)
 	s.Brk = make(chan int)
 	s.Sig = make(chan int,1)
+	s.Restart = make(chan int,1)
 	return s
 }
 
@@ -56,13 +60,26 @@ func (s *Socket) Input(udp *net.UDPConn) {
 		}
 		data := make([]byte,1500)
 		n,e := udp.Read(data)
-		if e==nil {
+		if e==nil {			
 			s.Pkts <- data[:n]
 		}
 	}
 }
-
+func (s *Socket) Close() {
+	defer recover()
+	close(s.Brk)
+}
+func (s *Socket) teardown() {
+	if s.Closer!=nil { s.Closer <- s.Closee }
+}
+func (s *Socket) restart() {
+	select {
+	case s.Restart <- 1:
+	default:
+	}
+}
 func (s *Socket) Dispatch(con *protocol.Connection) {
+	defer s.teardown()
 	tick := time.Tick(time.Second)
 	for {
 		con.QueueOut(s.Out)
@@ -74,6 +91,11 @@ func (s *Socket) Dispatch(con *protocol.Connection) {
 		case <- s.Brk: return
 		case pkt := <- s.Pkts:
 			con.Rcv(pkt)
+			if con.State==protocol.S_closed { s.Close() }
+			if con.Ev.Reconnect {
+				s.restart()
+				con.Ev.Reconnect = false
+			}
 		case <- tick:
 			con.Tmo = true
 			con.Rmit = true
